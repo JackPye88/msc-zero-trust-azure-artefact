@@ -1,0 +1,47 @@
+trigger: none
+
+schedules:
+  - cron: "0 */2 * * *"
+    displayName: "Stop Azure Firewall hourly"
+    branches:
+      include:
+        - master
+    always: true
+
+variables:
+  AZ_SUBSCRIPTION: "sc-jp-01"   # Service Connection name
+  FIREWALL_NAME: "afw-jp-con-hub-uks-001"
+  FIREWALL_RG: "rg-jp-con-hub-uks-001"
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: StopFirewall
+    displayName: "Stop Azure Firewall"
+    jobs:
+      - job: stop
+        displayName: "Deallocate Azure Firewall"
+        steps:
+          - checkout: self
+
+          - task: AzurePowerShell@5
+            displayName: "Stop (Deallocate) Azure Firewall"
+            inputs:
+              azureSubscription: "$(AZ_SUBSCRIPTION)"
+              ScriptType: "InlineScript"
+              azurePowerShellVersion: "LatestVersion"
+              pwsh: true
+              Inline: |
+                $ErrorActionPreference = "Stop"
+
+                Write-Host "Getting firewall..."
+                $fw = Get-AzFirewall -ResourceGroupName "$(FIREWALL_RG)" -Name "$(FIREWALL_NAME)"
+
+                Write-Host "Deallocating firewall..."
+                $fw.Deallocate()
+
+                Write-Host "Applying change..."
+                $fw | Set-AzFirewall
+
+                Write-Host "Done."

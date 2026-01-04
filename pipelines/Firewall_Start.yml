@@ -1,0 +1,43 @@
+trigger: none
+
+
+variables:
+  AZ_SUBSCRIPTION: "sc-jp-01"   # Service Connection name
+  FIREWALL_NAME: "afw-jp-con-hub-uks-001"
+  FIREWALL_RG: "rg-jp-con-hub-uks-001"
+  Vnet: "vnet-jp-con-hub-uks-001"
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: startFirewall
+    displayName: "Start Azure Firewall"
+    jobs:
+      - job: stop
+        displayName: "Start Azure Firewall"
+        steps:
+          - checkout: self
+
+          - task: AzurePowerShell@5
+            displayName: "Start Azure Firewall"
+            inputs:
+              azureSubscription: "$(AZ_SUBSCRIPTION)"
+              ScriptType: "InlineScript"
+              azurePowerShellVersion: "LatestVersion"
+              pwsh: true
+              Inline: |
+                $ErrorActionPreference = "Stop"
+
+                Write-Host "Getting firewall..."
+                $vnet = Get-AzVirtualNetwork -ResourceGroupName $(FIREWALL_RG) -Name $(Vnet)
+                $ip = Get-AzPublicIpAddress -ResourceGroupName $(FIREWALL_RG) -Name "pip-jp-con-afw-uks-001"
+                $fw = Get-AzFirewall -ResourceGroupName $(FIREWALL_RG) -Name $(FIREWALL_NAME)
+                Write-Host "Starting firewall..."
+                $fw.Allocate($vnet, $ip)
+
+                Write-Host "Applying change..."
+                $fw | Set-AzFirewall
+
+                Write-Host "Done."
+

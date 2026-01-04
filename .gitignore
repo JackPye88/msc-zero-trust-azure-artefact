@@ -37,3 +37,4 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+Code/1-Initial_Mgmt_build/.terraform.lock.hcl

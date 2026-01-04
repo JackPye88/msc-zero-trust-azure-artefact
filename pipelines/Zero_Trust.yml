@@ -1,0 +1,107 @@
+trigger: none
+pr: none
+
+variables:
+  tfWorkingDir: 'Code/4-LandingZoneBuild-ZT'
+  tfVarsFilePath: 'Environments/Security/security.tfvars'
+  tfPlanFile: 'tfplan.out'
+
+  backendAzureRmResourceGroupName: 'rg-jp-mgmt-storage-uks-001'
+  backendAzureRmStorageAccountName: 'stjpmgmttfstateuks001'
+  backendAzureRmContainerName: 'terraform-state'
+  backendAzureRmKey: 'ztsecurity-lz-build.tfstate'
+
+stages:
+- stage: Plan
+  displayName: Terraform Plan
+  jobs:
+  - job: plan
+    displayName: Plan (Linux self-hosted)
+    pool:
+      name: 'Agent_Pool_JP_SelfHosted'
+      demands:
+        - Agent.OS -equals Linux
+    steps:
+    - checkout: self
+      clean: true
+
+    - task: TerraformTask@5
+      displayName: terraform init (azurerm backend)
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(Build.SourcesDirectory)/$(tfWorkingDir)'
+        backendServiceArm: 'sc-jp-01'
+        backendAzureRmResourceGroupName: '$(backendAzureRmResourceGroupName)'
+        backendAzureRmStorageAccountName: '$(backendAzureRmStorageAccountName)'
+        backendAzureRmContainerName: '$(backendAzureRmContainerName)'
+        backendAzureRmKey: '$(backendAzureRmKey)'
+        commandOptions: '-reconfigure'
+
+
+    - task: TerraformTask@5
+      displayName: terraform validate
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+        workingDirectory: '$(Build.SourcesDirectory)/$(tfWorkingDir)'
+
+    - task: TerraformTask@5
+      displayName: terraform plan
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: '$(Build.SourcesDirectory)/$(tfWorkingDir)'
+        environmentServiceNameAzureRM: 'sc-jp-01'
+        commandOptions: '-var-file="$(tfVarsFilePath)" -out "$(tfPlanFile)"'
+
+    - publish: '$(Build.SourcesDirectory)/$(tfWorkingDir)/$(tfPlanFile)'
+      artifact: tfplan
+      displayName: Publish plan artifact
+
+- stage: Apply
+  displayName: Terraform Apply
+  dependsOn: Plan
+  condition: succeeded()
+  jobs:
+  - deployment: apply
+    displayName: Apply (Linux self-hosted)
+    environment: 'security'  # add approvals/checks here
+    pool:
+      name: 'Agent_Pool_JP_SelfHosted'
+      demands:
+        - Agent.OS -equals Linux
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            clean: true
+
+          - download: current
+            artifact: tfplan
+            displayName: Download plan artifact
+
+          - task: TerraformTask@5
+            displayName: terraform init (azurerm backend)
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(Build.SourcesDirectory)/$(tfWorkingDir)'
+              backendServiceArm: 'sc-jp-01'
+              backendAzureRmResourceGroupName: '$(backendAzureRmResourceGroupName)'
+              backendAzureRmStorageAccountName: '$(backendAzureRmStorageAccountName)'
+              backendAzureRmContainerName: '$(backendAzureRmContainerName)'
+              backendAzureRmKey: '$(backendAzureRmKey)'
+              commandOptions: '-reconfigure'
+
+
+
+          - task: TerraformTask@5
+            displayName: terraform apply (from plan)
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(Build.SourcesDirectory)/$(tfWorkingDir)'
+              environmentServiceNameAzureRM: 'sc-jp-01'
+              commandOptions: '-auto-approve "$(Pipeline.Workspace)/tfplan/$(tfPlanFile)"'

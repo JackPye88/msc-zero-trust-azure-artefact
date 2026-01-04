@@ -1,0 +1,6 @@
+retention_yearly_count,retention_monthly_count,retention_weekly_count,retention_daily_count,backup_time
+0,1,4,30,21:00
+1,12,4,30,21:00
+3,12,4,30,21:00
+5,12,4,30,
+7,12,4,30,
